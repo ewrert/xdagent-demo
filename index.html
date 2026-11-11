@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' http: https: data: blob:; connect-src 'self' http: https: ws: wss:; media-src 'self' http: https: data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';">
+  <title>XDAgent — 西电生活助手</title>
+
+  <!-- 启动前隐藏 Vue 模板，避免未绑定的弹窗遮住整个页面。 -->
+  <style>
+    [v-cloak] { display: none !important; }
+    #app-startup {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      padding: 24px; text-align: center; font-family: system-ui, sans-serif;
+      background: var(--color-bg-base, #ECE9E0); color: var(--color-text-primary, #141413);
+    }
+    #app-startup[hidden], #app-startup button[hidden] { display: none; }
+    #app-startup button {
+      padding: 10px 20px; border: 1px solid currentColor;
+      border-radius: 8px; cursor: pointer; font: inherit;
+    }
+  </style>
+  <script src="js/startup.js"></script>
+
+  <!-- Google Fonts: Lora + Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Poppins:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+
+  <!-- 中文衬线体（可选提升，CDN 失败时回退到系统字体） -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" media="print" onload="this.media='all'">
+
+  <!-- 样式 -->
+  <link rel="stylesheet" href="css/main.css?v=9">
+  <link rel="stylesheet" href="css/campus.css?v=1">
+
+</head>
+<body>
+
+<div id="app-startup" role="status" aria-live="polite">
+  <p id="app-startup-message">正在打开西电生活助手…</p>
+  <button id="app-startup-retry" type="button" hidden onclick="window.location.reload()">重新加载</button>
+</div>
+
+<div class="app-wrapper" id="app" v-cloak>
+
+  <!-- ═══ 顶部导航 ═══ -->
+  <header class="app-header">
+    <div class="app-header__left">
+      <h1 class="app-header__title">西电生活助手</h1>
+      <span class="app-header__subtitle">XDAgent</span>
+    </div>
+    <div class="app-header__right">
+      <button class="icon-btn settings-btn" @click="showSettings = true" title="设置大模型和系统参数" aria-label="设置大模型和系统参数">
+        <svg viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.3 3.3l1.4 1.4M13.3 13.3l1.4 1.4M3.3 14.7l1.4-1.4M13.3 4.7l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span class="settings-btn__label">设置</span>
+      </button>
+      <button v-if="!user" type="button" class="btn btn--ghost btn--sm account-login-btn" @click="openAuthModal('login')">
+        登录 / 注册
+      </button>
+      <button v-else type="button" class="user-menu" @click="openUserStatus" :title="'账号：' + user.username">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="5.2" r="2.7" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M2.8 14a5.2 5.2 0 0110.4 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span class="user-menu__name">{{ user.username }}</span>
+      </button>
+    </div>
+  </header>
+
+  <nav class="mobile-panel-nav" aria-label="移动端面板切换">
+    <button
+      type="button"
+      class="mobile-panel-nav__button"
+      :class="{ 'mobile-panel-nav__button--active': mobilePanel === 'timeline' }"
+      :aria-pressed="mobilePanel === 'timeline'"
+      @click="mobilePanel = 'timeline'"
+    >
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M1 7h14M5 1v4M11 1v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+      时间轴
+    </button>
+    <button
+      type="button"
+      class="mobile-panel-nav__button"
+      :class="{ 'mobile-panel-nav__button--active': mobilePanel === 'chat' }"
+      :aria-pressed="mobilePanel === 'chat'"
+      @click="mobilePanel = 'chat'"
+    >
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M14 8A6 6 0 012 8a6 6 0 0112 0z" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M10 7h.01M6 7h.01M8 11a2 2 0 01-2-2h4a2 2 0 01-2 2z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      AI 助手
+    </button>
+    <button
+      type="button"
+      class="mobile-panel-nav__button"
+      :class="{ 'mobile-panel-nav__button--active': mobilePanel === 'articles' }"
+      :aria-pressed="mobilePanel === 'articles'"
+      @click="mobilePanel = 'articles'"
+    >
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="1" y="2" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M4 5.5h8M4 8h8M4 10.5h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+      资讯
+    </button>
+  </nav>
+
+  <!-- ═══ 三栏布局 ═══ -->
+  <div
+    ref="mainLayout"
+    class="main-layout"
+    :class="['main-layout--mobile-' + mobilePanel, { 'main-layout--resizing': isResizingTimeline }]"
+    :style="{ '--panel-timeline-width': timelineWidth + 'px' }"
+  >
+
+    <!-- ===== 左侧：时间轴 ===== -->
+    <aside id="timeline-panel" class="panel panel--timeline">
+      <div class="panel__header">
+        <h2 class="panel__title">
+          <svg viewBox="0 0 16 16" fill="none">
+            <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M1 7h14" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M5 1v4M11 1v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          时间轴
+        </h2>
+        <div class="panel__actions">
+          <input type="file" ref="icsFileInput" accept=".ics" style="display:none" @change="importICS">
+          <button class="btn btn--ghost btn--icon" @click="triggerICSImport" :disabled="schedule.importing" title="导入 ICS 课表（选择本地 .ics 文件）" aria-label="导入 ICS 课表">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path d="M7 9V1M3 5l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M1 10v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="btn btn--ghost btn--icon" @click="refreshTimeline" title="刷新" :disabled="timeline.loading">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path d="M11.5 7A4.5 4.5 0 013 5.5M2.5 7A4.5 4.5 0 0111 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M11.5 2.5v3h-3M2.5 11.5v-3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="btn btn--ghost btn--icon" @click="toggleTheme" title="切换夜间模式">
+            <svg v-if="theme === 'light'" viewBox="0 0 14 14" fill="none" width="14" height="14">
+              <path d="M7 1v1M7 12v1M1 7h1M12 7h1M3.05 3.05l.7.7M10.25 10.25l.7.7M3.05 10.95l.7-.7M10.25 3.75l.7-.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+            <svg v-else viewBox="0 0 14 14" fill="none" width="14" height="14">
+              <path d="M11.5 8.5A5.5 5.5 0 015.5 3a5.5 5.5 0 006 5.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M8 1v1M8 12v1M12 8h1M1 8h1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".5"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <!-- 日期筛选 -->
+      <div class="timeline-filter">
+        <div class="timeline-filter__toolbar">
+          <div class="timeline-type-filter" role="group" aria-label="时间轴类型筛选">
+            <button
+              v-for="option in [{ value: 'all', label: '全部' }, { value: 'activity', label: '日程' }, { value: 'course', label: '课表' }]"
+              :key="option.value"
+              type="button"
+              class="timeline-type-filter__button"
+              :class="{ 'timeline-type-filter__button--active': timeline.typeFilter === option.value }"
+              :aria-pressed="timeline.typeFilter === option.value"
+              aria-controls="timeline-events"
+              @click="setTimelineTypeFilter(option.value)"
+            >{{ option.label }}</button>
+          </div>
+          <div class="timeline-width-actions" role="group" aria-label="时间轴宽度">
+            <button type="button" class="timeline-width-actions__button" @click="setTimelineWidth(timelineWidth - 40)" :disabled="timelineWidth <= 240" title="缩窄时间轴" aria-label="缩窄时间轴">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 4L6 8l4 4M3 3v10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="timeline-width-actions__button" @click="setTimelineWidth(timelineWidth + 40)" :disabled="timelineWidth >= timelineMaxWidth" title="加宽时间轴" aria-label="加宽时间轴">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 4l4 4-4 4M13 3v10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="timeline-filter__row">
+          <div class="timeline-filter__date-wrap">
+            <input type="date" class="timeline-filter__date" :class="{ 'is-empty': !timeline.dateFilter.startDate }" v-model="timeline.dateFilter.startDate" @change="applyDateFilter" aria-label="开始日期" title="开始日期">
+            <span class="timeline-filter__date-label" v-if="!timeline.dateFilter.startDate">起始</span>
+          </div>
+          <span class="timeline-filter__sep">—</span>
+          <div class="timeline-filter__date-wrap">
+            <input type="date" class="timeline-filter__date" :class="{ 'is-empty': !timeline.dateFilter.endDate }" v-model="timeline.dateFilter.endDate" @change="applyDateFilter" aria-label="结束日期" title="结束日期">
+            <span class="timeline-filter__date-label" v-if="!timeline.dateFilter.endDate">结束</span>
+          </div>
+          <button v-if="timeline.dateFilter.startDate || timeline.dateFilter.endDate" class="btn btn--ghost btn--icon" @click="clearDateFilter" title="清除筛选" style="flex-shrink:0">
+            <svg viewBox="0 0 14 14" fill="none" width="14" height="14">
+              <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="timeline-events" class="panel__body">
+        <!-- 加载中 -->
+        <div v-if="timeline.loading" class="state-loading">
+          <div class="state-loading__spinner"></div>
+          <span class="state-loading__text">加载中...</span>
+        </div>
+        <!-- 错误 -->
+        <div v-else-if="timeline.error" class="state-error">
+          <p>加载失败: {{ timeline.error }}</p>
+          <button class="btn btn--ghost" @click="refreshTimeline">重试</button>
+        </div>
+        <!-- 空 -->
+        <div v-else-if="sortedTimelineEvents.length === 0" class="state-empty">
+          <div class="state-empty__icon">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="12" stroke="currentColor" stroke-width="1.5" opacity=".3"/>
+              <path d="M16 10v6l4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".3"/>
+            </svg>
+          </div>
+          <span class="state-empty__text">{{ timeline.typeFilter === 'course' ? '暂无课表事件' : timeline.typeFilter === 'activity' ? '暂无日程' : '暂无事件' }}</span>
+          <button v-if="timeline.events.length && timeline.typeFilter !== 'all'" type="button" class="btn btn--ghost" @click="setTimelineTypeFilter('all')">显示全部</button>
+        </div>
+        <!-- 事件列表 -->
+        <div v-else class="timeline-list" :class="{ 'timeline-list--split': timeline.typeFilter === 'all' }">
+          <div
+            v-for="event in sortedTimelineEvents"
+            :key="event.id"
+            class="timeline-event"
+            :class="[
+              isCourseEvent(event.source) ? 'timeline-event--course' : 'timeline-event--activity',
+              { 'timeline-event--today': isToday(event.time), 'timeline-event--manual': event.source === 'manual' }
+            ]"
+          >
+            <div class="timeline-event__side">
+              <div class="timeline-event__time">{{ formatTime(event.time) }}</div>
+              <div
+                class="timeline-event__card"
+                :style="{ borderLeftColor: sourceColor(event.source) }"
+              >
+                <div class="timeline-event__title">{{ event.title }}</div>
+                <div v-if="event.description" class="timeline-event__desc">{{ event.description }}</div>
+                <div class="timeline-event__meta">
+                  <span class="timeline-event__source" :style="{ background: sourceColor(event.source) + '18', borderColor: sourceColor(event.source) + '40', color: sourceColor(event.source) }">{{ formatSource(event.source) }}</span>
+                  <span v-if="event.duration" class="timeline-event__source">{{ event.duration }}分钟</span>
+                  <button
+                    class="timeline-event__delete"
+                    @click="deleteEvent(event.id)"
+                    title="删除事件"
+                    aria-label="删除事件"
+                  >
+                    <svg viewBox="0 0 14 14" fill="none">
+                      <path d="M2 3.5h10M5 3.5V2a1 1 0 011-1h2a1 1 0 011 1v1.5M11.5 3.5v8a1 1 0 01-1 1h-7a1 1 0 01-1-1v-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M5.5 6.5v4M8.5 6.5v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div
+              class="timeline-event__dot"
+              :style="{ borderColor: sourceColor(event.source) }"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div
+      class="panel-resizer"
+      role="separator"
+      tabindex="0"
+      aria-label="调整时间轴宽度"
+      aria-orientation="vertical"
+      aria-controls="timeline-panel"
+      :aria-valuenow="timelineWidth"
+      aria-valuemin="240"
+      :aria-valuemax="timelineMaxWidth"
+      :aria-valuetext="timelineWidth + ' 像素'"
+      title="拖动调整宽度，双击恢复默认；也可使用左右方向键"
+      @pointerdown="startTimelineResize"
+      @pointermove="moveTimelineResize"
+      @pointerup="finishTimelineResize"
+      @pointercancel="finishTimelineResize"
+      @lostpointercapture="finishTimelineResize"
+      @keydown="onTimelineResizeKeydown"
+      @dblclick="setTimelineWidth(400)"
+    ><span aria-hidden="true"></span></div>
+
+    <!-- ===== 中间：AI 对话 ===== -->
+    <main class="panel chat-panel">
+      <div class="panel__header">
+        <h2 class="panel__title">
+          <svg class="assistant-mark" aria-hidden="true"><use href="assets/icons.svg#triangle"></use></svg>
+          AI 助手
+        </h2>
+        <div class="panel__actions">
+          <button class="btn btn--ghost btn--icon" @click="toggleSchedule" title="课表" aria-label="课表">
+            <svg viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M2 6h12M6 2v12M10 2v12" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M5 9h.01M8 9h.01M11 9h.01M5 11.5h.01M8 11.5h.01M11 11.5h.01" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="btn btn--ghost" @click="clearChat">清空对话</button>
+        </div>
+      </div>
+
+      <!-- ═══ 课表滑出面板 ═══ -->
+      <div class="schedule-panel" v-if="schedule.show">
+        <div class="schedule-panel__header">
+          <button class="schedule-week-btn" @click="prevWeek" title="上一周" aria-label="上一周" :disabled="schedule.currentWeek <= 1 || schedule.importing">‹</button>
+          <span class="schedule-week-label">第 {{ schedule.currentWeek }} 周</span>
+          <button class="schedule-week-btn" @click="nextWeek" title="下一周" aria-label="下一周" :disabled="schedule.currentWeek >= schedule.totalWeeks || schedule.importing">›</button>
+          <span class="schedule-week-dates">{{ schedule.weekRange.start }} ~ {{ schedule.weekRange.end }}</span>
+          <label class="schedule-checkbox">
+            <input type="checkbox" v-model="schedule.showTimeline" @change="onTimelineToggle">
+            <span>标注时间轴</span>
+          </label>
+          <input type="file" ref="scheduleFileInput" accept=".ics,text/calendar" hidden @change="importScheduleICS">
+          <button class="btn btn--ghost" @click="chooseScheduleFile" :disabled="schedule.importing">
+            {{ schedule.importing ? '导入中…' : '导入课表' }}
+          </button>
+          <button class="btn btn--ghost" @click="showAddCourse = true" title="设置课程">
+            <svg viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            设置课程
+          </button>
+        </div>
+
+        <div class="schedule-status" role="status" aria-live="polite">
+          <span v-if="schedule.loading">正在加载课表…</span>
+          <template v-else-if="schedule.error">
+            <span>{{ schedule.error }}</span>
+            <button class="btn btn--ghost" @click="loadScheduleData">重试</button>
+          </template>
+          <span v-else-if="!user">游客演示课表 · 登录后可导入自己的 .ics 课表</span>
+          <span v-else-if="!scheduleHasEvents">本周暂无课程，可切换周次或导入课表。</span>
+          <span v-else>点击课程右下角可查看教师和完整信息</span>
+        </div>
+
+        <div class="schedule-grid-wrap">
+          <!-- 课表网格 -->
+          <div class="schedule-grid">
+            <!-- 左上角空位 + 天头 -->
+            <div class="schedule-grid__cell schedule-grid__header schedule-grid__corner"></div>
+            <div
+              v-for="(dayName, dIndex) in schedule.dayNames"
+              :key="dIndex"
+              class="schedule-grid__cell schedule-grid__header"
+              :class="{ 'schedule-grid__header--today': scheduleTodayIndex === dIndex }"
+            >
+              <div class="schedule-grid__day-name">{{ dayName }}</div>
+              <div class="schedule-grid__day-date">{{ schedule.weekRange.dates[dIndex]?.slice(5) }}</div>
+            </div>
+
+            <!-- 时段行 -->
+            <template v-for="slot in scheduleVisibleSlots" :key="slot.id">
+              <!-- 时间标签 -->
+              <div class="schedule-grid__cell schedule-grid__time">
+                <span>{{ slot.start || slot.label }}</span>
+                <span v-if="slot.end" class="schedule-grid__time-end">{{ slot.end }}</span>
+              </div>
+              <!-- 7 天 -->
+              <div
+                v-for="day in 7"
+                :key="'s-' + slot.id + '-d-' + day"
+                class="schedule-grid__cell"
+                :class="{ 'schedule-grid__cell--today': scheduleTodayIndex === day - 1 }"
+              >
+                <div class="schedule-grid__events">
+                  <div
+                    v-for="(evt, evtIdx) in getCellEvents(day, slot.id)"
+                    :key="evt.id || evtIdx"
+                    class="schedule-event"
+                    :class="{
+                      'schedule-event--timeline': evt._type === 'timeline',
+                      'schedule-event--expanded': isEventExpanded(day, slot.id, evtIdx)
+                    }"
+                    :style="{ borderLeftColor: evt.color || evt._color || 'var(--color-accent-sand)' }"
+                  >
+                    <div class="schedule-event__inner">
+                      <div class="schedule-event__title">{{ evt.name }}</div>
+                      <div class="schedule-event__time">{{ evt._displayTime }}</div>
+                      <div v-if="evt.room" class="schedule-event__room">{{ evt.room }}</div>
+                      <div v-if="isEventExpanded(day, slot.id, evtIdx)" class="schedule-event__details">
+                        <div v-if="evt.teacher">教师：{{ evt.teacher }}</div>
+                        <div v-if="evt._fullDescription">{{ evt._fullDescription }}</div>
+                        <div v-if="!evt.teacher && !evt._fullDescription">暂无更多信息</div>
+                      </div>
+                    </div>
+                    <button
+                      class="schedule-event__expand"
+                      @click.stop="toggleEventExpand(day, slot.id, evtIdx)"
+                      :aria-label="(isEventExpanded(day, slot.id, evtIdx) ? '收起' : '展开') + evt.name"
+                      :aria-expanded="isEventExpanded(day, slot.id, evtIdx)"
+                    >
+                      <svg viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- 消息区域 -->
+      <div class="chat-messages" ref="chatMessages">
+        <div v-if="chat.messages.length === 0" class="assistant-welcome">
+          <div class="assistant-greeting">
+            <img src="assets/assistant-avatar.webp" width="72" height="72" alt="" class="assistant-greeting__avatar">
+            <p>你好！我可以帮你梳理校园通知、提取重点，并生成你的日程时间线。</p>
+          </div>
+          <button type="button" class="assistant-prompt" @click="useChatPrompt('这周有哪些重要安排？')" :disabled="chat.isRestoring || chat.isSending">
+            <svg aria-hidden="true"><use href="assets/icons.svg#sparkles"></use></svg>
+            <span>这周有哪些重要安排？</span>
+          </button>
+          <section class="assistant-guide" aria-labelledby="assistant-guide-title">
+            <h3 id="assistant-guide-title"><svg aria-hidden="true"><use href="assets/icons.svg#circle-check"></use></svg>帮你整理本周重点</h3>
+            <button v-for="shortcut in chatShortcuts" :key="shortcut.title" type="button" class="assistant-shortcut" @click="useChatPrompt(shortcut.prompt)" :disabled="chat.isRestoring || chat.isSending">
+              <svg class="assistant-shortcut__icon" aria-hidden="true"><use :href="'assets/icons.svg#' + shortcut.icon"></use></svg>
+              <span><strong>{{ shortcut.title }}</strong><span class="assistant-shortcut__detail"> · {{ shortcut.detail }}</span></span>
+              <svg class="assistant-shortcut__arrow" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg>
+            </button>
+          </section>
+        </div>
+
+        <div
+          v-for="(msg, index) in chat.messages"
+          :key="msg.id || msg.timestamp || index"
+          class="chat-msg"
+          :class="msg.role === 'user' ? 'chat-msg--user' : 'chat-msg--ai'"
+        >
+          <!-- AI 消息的头部 -->
+          <div v-if="msg.role === 'assistant'" class="chat-msg__meta">
+            <div class="chat-ai-avatar">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2l6 10H2L8 2z" fill="currentColor" opacity=".8"/>
+              </svg>
+            </div>
+            <span class="chat-msg__sender">AI</span>
+            <time class="chat-msg__time">{{ formatTimestamp(msg.timestamp) }}</time>
+          </div>
+          <!-- 用户消息头部 -->
+          <div v-if="msg.role === 'user'" class="chat-msg__meta">
+            <time class="chat-msg__time">{{ formatTimestamp(msg.timestamp) }}</time>
+          </div>
+          <!-- 消息气泡（思考状态时隐藏，用工具卡片代替） -->
+          <div v-if="!msg.isThinking" class="chat-msg__bubble" v-html="formatMessageContent(msg.content)"></div>
+          <!-- 工具调用卡片 -->
+          <div v-if="msg.isThinking && msg.content" class="chat-tool-card">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path d="M7 1v2M7 11v2M1 7h2M11 7h2M3.3 3.3l1.4 1.4M9.3 9.3l1.4 1.4M3.3 10.7l1.4-1.4M9.3 4.7l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+            <span class="chat-tool-card__text">{{ msg.content }}</span>
+          </div>
+        </div>
+
+        <!-- 打字指示器 -->
+        <div v-if="chat.isTyping" class="chat-msg chat-msg--ai">
+          <div class="chat-msg__meta">
+            <div class="chat-ai-avatar">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2l6 10H2L8 2z" fill="currentColor" opacity=".8"/>
+              </svg>
+            </div>
+            <span class="chat-msg__sender">AI</span>
+          </div>
+          <div class="chat-msg__bubble">
+            <div class="chat-typing">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入区 -->
+      <div class="chat-input-area">
+        <div class="chat-input-wrap">
+          <textarea
+            ref="chatInput"
+            v-model="chat.inputMessage"
+            class="chat-textarea"
+            placeholder="输入消息... (Shift+Enter 换行)"
+            rows="1"
+            :disabled="chat.isRestoring"
+            @keydown.enter="handleChatKeydown"
+            @input="autoResizeTextarea"
+          ></textarea>
+          <button
+            class="chat-send-btn"
+            @click="sendMessage"
+            :disabled="chat.isRestoring || chat.isSending || !chat.inputMessage.trim()"
+            aria-label="发送"
+          >
+            <svg width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#send"></use></svg>
+          </button>
+        </div>
+        <p class="chat-input-hint">AI 可能会出错，请核实重要信息</p>
+      </div>
+    </main>
+
+    <!-- ===== 右侧：公众号文章 / 校园新闻 ===== -->
+    <aside class="panel panel--articles">
+      <div class="panel__header">
+        <h2 class="panel__title">
+          <svg viewBox="0 0 16 16" fill="none">
+            <rect x="1" y="2" width="14" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M4 5.5h8M4 8h8M4 10.5h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          <span v-if="!showNews">公众号文章</span>
+          <span v-else>校园新闻</span>
+        </h2>
+        <div class="panel__actions">
+          <button class="btn btn--ghost btn--icon" @click="toggleNewsTab" :title="showNews ? '切换到文章' : '切换到新闻'" style="font-size:12px;font-weight:500">
+            <svg viewBox="0 0 14 14" fill="none" width="13" height="13">
+              <path v-if="!showNews" d="M1 3h12v8H1z" stroke="currentColor" stroke-width="1.3" fill="none"/>
+              <path v-if="!showNews" d="M1 6h12" stroke="currentColor" stroke-width="1.3"/>
+              <path v-else d="M1 3h8v8H1zM10 3l3 2.5L10 8" stroke="currentColor" stroke-width="1.3" fill="none"/>
+              <path v-if="showNews" d="M1 6h6" stroke="currentColor" stroke-width="1.3"/>
+              <circle v-if="showNews" cx="11" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/>
+            </svg>
+          </button>
+          <button v-if="!showNews" class="btn btn--ghost article-analyze-btn" @click="analyzeAndCreateTimeline" :disabled="isAnalyzingLatest || articles.loading || !selectedAnalysisArticles.length" :aria-label="selectedAnalysisArticles.length ? 'AI 分析（' + selectedAnalysisArticles.length + '）' : 'AI 分析'">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path d="M7 1v6l3 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+            AI 分析<span v-if="selectedAnalysisArticles.length" class="article-analyze-count" aria-hidden="true">{{ selectedAnalysisArticles.length }}</span>
+          </button>
+          <button v-else class="btn btn--ghost" @click="refreshNews" :disabled="newsLoading">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path d="M11.5 7A4.5 4.5 0 013 5.5M2.5 7A4.5 4.5 0 0111 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M11.5 2.5v3h-3M2.5 11.5v-3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            刷新
+          </button>
+        </div>
+      </div>
+
+      <!-- 搜索（仅文章模式） -->
+      <div class="article-search" v-if="!showNews">
+        <div class="search-box">
+          <svg viewBox="0 0 14 14" fill="none">
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M9.5 9.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <input
+            v-model="articles.searchQuery"
+            type="text"
+            placeholder="搜索文章..."
+            aria-label="搜索文章"
+            @input="queueArticleSearch"
+          >
+        </div>
+      </div>
+
+      <div v-if="!showNews" class="article-selection" aria-label="文章分析选择">
+        <div class="article-selection__tools">
+          <span role="status">已选 {{ selectedAnalysisArticles.length }} 篇</span>
+          <button type="button" class="btn btn--ghost btn--sm" @click="selectFilteredArticles" :disabled="articlePicker.running || articles.loading || !articles.list.length">全选当前结果</button>
+          <button type="button" class="btn btn--ghost btn--sm" @click="clearArticleSelection" :disabled="articlePicker.running || !selectedAnalysisArticles.length">清空选择</button>
+        </div>
+        <p v-if="hiddenSelectedArticleCount" class="article-selection__hint">其中 {{ hiddenSelectedArticleCount }} 篇不在当前搜索结果中，也会参与分析。</p>
+        <p v-else-if="!selectedAnalysisArticles.length" class="article-selection__hint">先在下方勾选文章，再点击右上角 AI 分析。</p>
+        <div v-if="articlePicker.show" class="article-selection__progress">
+          <div class="article-selection__tools">
+            <span role="status" aria-live="polite">已完成 {{ articlePicker.completed }} / {{ articlePicker.total }}</span>
+            <button v-if="articlePicker.running" type="button" class="btn btn--secondary btn--sm" @click="stopArticleAnalysis">停止分析</button>
+            <button v-else type="button" class="btn btn--ghost btn--sm" @click="closeArticlePicker">收起结果</button>
+          </div>
+          <details v-if="articlePicker.results.length" class="article-selection__results">
+            <summary>查看逐篇结果（{{ articlePicker.results.length }}）</summary>
+            <ul class="article-picker__results" aria-label="逐篇分析结果">
+              <li v-for="result in articlePicker.results" :key="result.id" :class="'article-picker__result--' + result.status">
+                <strong>{{ result.title }}</strong><span>{{ result.message }}</span>
+              </li>
+            </ul>
+          </details>
+        </div>
+      </div>
+
+      <!-- 内容区 -->
+      <div class="panel__body">
+        <!-- ═══ 公众号文章模式 ═══ -->
+        <template v-if="!showNews">
+          <div v-if="articles.loading" class="state-loading">
+            <div class="state-loading__spinner"></div>
+            <span class="state-loading__text">加载中...</span>
+          </div>
+          <div v-else-if="articles.error" class="state-error">
+            <p>加载失败: {{ articles.error }}</p>
+            <button class="btn btn--ghost" @click="loadArticles">重试</button>
+          </div>
+          <div v-else-if="articles.list.length === 0" class="state-empty">
+            <div class="state-empty__icon">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect x="4" y="6" width="24" height="20" rx="2" stroke="currentColor" stroke-width="1.5" opacity=".3"/>
+                <path d="M10 12h12M10 16h12M10 20h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".3"/>
+              </svg>
+            </div>
+            <span class="state-empty__text">暂无文章</span>
+          </div>
+          <div v-else class="article-list">
+            <div
+              v-for="article in articles.list"
+              :key="article.id"
+              class="article-card"
+              :class="{ 'article-card--selected': articlePicker.selectedIds.includes(String(article.id)) }"
+            >
+              <button type="button" class="article-card__open" @click="viewArticle(article)">
+                <span class="article-card__icon"><svg aria-hidden="true"><use href="assets/icons.svg#file-description"></use></svg></span>
+                <span class="article-card__text">
+                  <span class="article-card__title">{{ article.title }}</span>
+                  <span class="article-card__meta">
+                    <span>{{ article.author }}</span>
+                    <span>{{ formatDate(article.publish_time) }}</span>
+                  </span>
+                </span>
+              </button>
+              <div v-if="article.summary" class="article-card__summary">
+                {{ article.summary }}
+              </div>
+              <div v-if="article.tags && article.tags.length" class="article-card__tags">
+                <span class="article-card__tag" v-for="tag in article.tags" :key="tag">{{ tag }}</span>
+              </div>
+              <div class="article-card__footer">
+                <label class="article-card__select" @click.stop>
+                  <input type="checkbox" :checked="articlePicker.selectedIds.includes(String(article.id))" :aria-label="'选择文章：' + article.title" :disabled="articlePicker.running" @change="toggleArticleSelection(article, $event.target.checked)">
+                  <span>选择分析</span>
+                </label>
+                <button
+                  class="article-card__add-btn"
+                  @click.stop="addArticleToTimeline(article)"
+                  :disabled="articleAnalyzing[article.id] || articlePicker.running"
+                >
+                  <svg viewBox="0 0 12 12" fill="none">
+                    <path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  {{ articleAnalyzing[article.id] ? '分析中...' : '添加事件' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ═══ 校园新闻模式 ═══ -->
+        <template v-else>
+          <div v-if="newsLoading" class="state-loading">
+            <div class="state-loading__spinner"></div>
+            <span class="state-loading__text">加载新闻...</span>
+          </div>
+          <div v-else-if="newsError" class="state-error">
+            <p>{{ newsError }}</p>
+            <button class="btn btn--ghost" @click="refreshNews">重试</button>
+          </div>
+          <div v-else-if="newsList.length === 0" class="state-empty">
+            <div class="state-empty__icon">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" opacity=".3"/>
+                <path d="M10 10l12 12M22 10L10 22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".3"/>
+              </svg>
+            </div>
+            <span class="state-empty__text">暂无新闻</span>
+          </div>
+          <div v-else class="article-list">
+            <a
+              v-for="(item, idx) in newsList"
+              :key="item.url || idx"
+              :href="safeExternalUrl(item.url) || '#'"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="article-card"
+              @click="handleNewsClick($event, item.url)"
+            >
+              <div class="article-card__title" style="font-size:13px">{{ item.title }}</div>
+              <div class="article-card__meta">
+                <span>{{ item.source }}</span>
+              </div>
+            </a>
+          </div>
+        </template>
+      </div>
+    </aside>
+
+  </div>
+  <!-- /main-layout -->
+
+  <!-- ═══ 设置弹窗 ═══ -->
+  <div v-if="showSettings" class="modal-overlay" @click="showSettings = false">
+    <div class="modal" @click.stop>
+      <div class="modal__header">
+        <h2 class="modal__title">系统设置</h2>
+        <button class="modal__close" @click="showSettings = false" aria-label="关闭">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 4l10 10M14 4l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <form class="settings-form" @submit.prevent="saveSettings">
+          <div class="form-group">
+            <label for="wechatApiKey">微信 API Key</label>
+            <input type="password" id="wechatApiKey" v-model="settings.wechat_api_key" placeholder="输入微信 API Key" autocomplete="off">
+            <small>用于同步公众号文章</small>
+          </div>
+          <div class="form-group">
+            <label for="aiApiKey">AI API Key</label>
+            <input type="password" id="aiApiKey" v-model="settings.ai_api_key" placeholder="输入 AI API Key" autocomplete="off">
+            <small>用于 AI 聊天功能</small>
+          </div>
+          <div class="form-group">
+            <label for="aiApiUrl">AI API 地址</label>
+            <input type="text" id="aiApiUrl" v-model="settings.ai_api_url" placeholder="如: https://api.deepseek.com" list="aiApiUrlSuggestions">
+            <small>DeepSeek 官方地址为 https://api.deepseek.com</small>
+            <datalist id="aiApiUrlSuggestions">
+              <option value="https://api.openai.com/v1">
+              <option value="https://api.deepseek.com">
+              <option value="http://localhost:11434/v1">
+            </datalist>
+          </div>
+          <div class="form-group">
+            <label for="aiModel">AI 模型名称</label>
+            <input type="text" id="aiModel" v-model="settings.ai_model" placeholder="如: deepseek-flash" list="aiModelSuggestions">
+            <small>DeepSeek 当前可用：deepseek-flash、deepseek-v4-pro</small>
+            <datalist id="aiModelSuggestions">
+              <option value="deepseek-flash">
+              <option value="deepseek-v4-pro">
+            </datalist>
+          </div>
+          <div class="form-group">
+            <label for="wakeSchedule">AI 定时唤醒</label>
+            <input type="text" id="wakeSchedule" v-model="settings.wake_schedule" placeholder="如: 0 9 * * * (每天9点)">
+            <small>Cron 表达式格式，多个时间用逗号分隔（如: 09:00,14:00,19:00）</small>
+          </div>
+
+          <!-- 唤醒任务管理 -->
+          <div class="form-group wake-tasks-section">
+            <label>唤醒任务列表</label>
+            <div class="wake-tasks-list">
+              <div v-if="wakeTasks.length === 0" class="wake-tasks-empty">暂无任务</div>
+              <div v-for="(task, idx) in wakeTasks" :key="task.id" class="wake-task-item">
+                <div class="wake-task-item__info">
+                  <div class="wake-task-item__prompt">{{ task.prompt }}</div>
+                  <div class="wake-task-item__meta">
+                    <span v-if="task.schedule_time">定时: {{ task.schedule_time }}</span>
+                    <span v-else>每次唤醒执行</span>
+                    <span :class="task.completed ? 'wake-task-item__status--done' : 'wake-task-item__status--pending'">
+                      {{ task.completed ? '已完成' : '待执行' }}
+                    </span>
+                  </div>
+                  <div v-if="task.result" class="wake-task-item__result">{{ task.result.slice(0, 100) }}</div>
+                </div>
+                <button type="button" class="btn btn--ghost btn--icon" @click="deleteWakeTask(task.id)" title="删除任务">
+                  <svg viewBox="0 0 14 14" fill="none" width="12" height="12">
+                    <path d="M2 3.5h10M5 3.5V2a1 1 0 011-1h2a1 1 0 011 1v1.5M11.5 3.5v8a1 1 0 01-1 1h-7a1 1 0 01-1-1v-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M5.5 6.5v4M8.5 6.5v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="wake-task-add">
+              <input type="text" v-model="newWakeTaskPrompt" placeholder="输入唤醒任务描述..." @keydown.enter="addWakeTask">
+              <button type="button" class="btn btn--primary btn--sm" @click="addWakeTask" :disabled="!newWakeTaskPrompt.trim() || isAddingWakeTask">
+                {{ isAddingWakeTask ? '添加中...' : '添加' }}
+              </button>
+            </div>
+            <small>任务会在设定的唤醒时间自动执行，结果会保存下来</small>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary">保存设置</button>
+            <button type="button" class="btn btn--secondary" @click="showSettings = false">取消</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 登录 / 注册 / 密保找回 ═══ -->
+  <div v-if="authModal.show" class="modal-overlay" @click.self="closeAuthModal">
+    <section class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" @click.stop>
+      <div class="modal__header">
+        <h2 class="modal__title" id="auth-modal-title">账号</h2>
+        <button type="button" class="modal__close" @click="closeAuthModal" aria-label="关闭账号弹窗" :disabled="authModal.loading">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 4l10 10M14 4l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="auth-tabs" role="tablist" aria-label="账号操作">
+        <button type="button" role="tab" :aria-selected="authModal.tab === 'login'" :class="['auth-tab', { 'auth-tab--active': authModal.tab === 'login' }]" :disabled="authModal.loading" @click="switchAuthTab('login')">登录</button>
+        <button type="button" role="tab" :aria-selected="authModal.tab === 'register'" :class="['auth-tab', { 'auth-tab--active': authModal.tab === 'register' }]" :disabled="authModal.loading" @click="switchAuthTab('register')">注册</button>
+        <button type="button" role="tab" :aria-selected="authModal.tab === 'forgot'" :class="['auth-tab', { 'auth-tab--active': authModal.tab === 'forgot' }]" :disabled="authModal.loading" @click="switchAuthTab('forgot')">忘记密码</button>
+      </div>
+
+      <div v-if="authModal.tab === 'login'" class="modal__body">
+        <p class="auth-help">使用在本应用注册的账号登录。首次使用请先注册，校园账号不会自动开通。</p>
+        <form class="settings-form" @submit.prevent="doLogin">
+          <div class="form-group">
+            <label for="authUsername">用户名</label>
+            <input id="authUsername" v-model.trim="authModal.username" type="text" placeholder="请输入用户名" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="20" required>
+          </div>
+          <div class="form-group">
+            <label for="authPassword">密码</label>
+            <div class="auth-passphrase">
+              <input id="authPassword" v-model="authModal.password" :type="authModal.showPassword ? 'text' : 'password'" placeholder="请输入密码" autocomplete="current-password" minlength="6" maxlength="128" required>
+              <button type="button" class="btn btn--ghost btn--sm" @click="authModal.showPassword = !authModal.showPassword" :aria-pressed="authModal.showPassword">{{ authModal.showPassword ? '隐藏密码' : '显示密码' }}</button>
+            </div>
+          </div>
+          <p v-if="authModal.error" class="form-error" role="alert">{{ authModal.error }}</p>
+          <button v-if="authModal.errorCode === 'USER_NOT_FOUND'" type="button" class="btn btn--ghost" @click="switchAuthTab('register')">用此用户名注册</button>
+          <div class="form-actions auth-form-actions">
+            <button type="submit" class="btn btn--primary btn--block" :disabled="authModal.loading">
+              {{ authModal.loading ? '登录中...' : '登录' }}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div v-else-if="authModal.tab === 'register'" class="modal__body">
+        <form class="settings-form" @submit.prevent="doRegister">
+          <div class="form-group">
+            <label for="regUsername">用户名</label>
+            <input id="regUsername" v-model.trim="authModal.username" type="text" placeholder="3~20 位字母、数字或下划线" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required>
+          </div>
+          <div class="form-group">
+            <label for="regPassword">密码</label>
+            <input id="regPassword" v-model="authModal.password" type="password" placeholder="至少 6 位" autocomplete="new-password" minlength="6" required>
+          </div>
+          <div class="form-group">
+            <label for="regConfirm">确认密码</label>
+            <input id="regConfirm" v-model="authModal.confirmPassword" type="password" placeholder="再次输入密码" autocomplete="new-password" minlength="6" required>
+          </div>
+          <div class="form-group">
+            <label for="regQuestion">密保问题</label>
+            <select id="regQuestion" v-model="authModal.securityQuestion" required>
+              <option value="" disabled>请选择密保问题</option>
+              <option v-for="question in securityQuestions" :key="question" :value="question">{{ question }}</option>
+            </select>
+            <small>用于忘记密码时验证身份</small>
+          </div>
+          <div class="form-group">
+            <label for="regAnswer">密保答案</label>
+            <input id="regAnswer" v-model.trim="authModal.securityAnswer" type="text" placeholder="至少 2 个字符" autocomplete="off" minlength="2" maxlength="200" required>
+          </div>
+          <p v-if="authModal.error" class="form-error" role="alert">{{ authModal.error }}</p>
+          <div class="form-actions auth-form-actions">
+            <button type="submit" class="btn btn--primary btn--block" :disabled="authModal.loading">
+              {{ authModal.loading ? '注册中...' : '注册并登录' }}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div v-else class="modal__body">
+        <form class="settings-form" @submit.prevent="doForgotPassword">
+          <div class="form-group">
+            <label for="forgotUsername">用户名</label>
+            <input id="forgotUsername" v-model.trim="authModal.username" type="text" placeholder="请输入用户名" autocomplete="username" autocapitalize="none" spellcheck="false" @blur="loadSecurityQuestion" required>
+          </div>
+          <div class="form-group">
+            <label for="forgotQuestion">密保问题</label>
+            <input id="forgotQuestion" :value="authModal.securityQuestion" type="text" :placeholder="authQuestionLoading ? '正在加载...' : '输入用户名后显示'" disabled>
+          </div>
+          <div class="form-group">
+            <label for="forgotAnswer">密保答案</label>
+            <input id="forgotAnswer" v-model.trim="authModal.securityAnswer" type="text" placeholder="请输入密保答案" autocomplete="off" required>
+          </div>
+          <div class="form-group">
+            <label for="forgotNewPassword">新密码</label>
+            <input id="forgotNewPassword" v-model="authModal.newPassword" type="password" placeholder="至少 6 位" autocomplete="new-password" minlength="6" required>
+          </div>
+          <p v-if="authModal.error" class="form-error" role="alert">{{ authModal.error }}</p>
+          <div class="form-actions auth-form-actions">
+            <button type="submit" class="btn btn--primary btn--block" :disabled="authModal.loading || authQuestionLoading">
+              {{ authModal.loading ? '重置中...' : '重置密码' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══ 用户状态 ═══ -->
+  <div v-if="showUserStatus && user" class="modal-overlay" @click.self="showUserStatus = false">
+    <section class="modal user-status-modal" role="dialog" aria-modal="true" aria-labelledby="user-status-title" @click.stop>
+      <div class="modal__header">
+        <h2 class="modal__title" id="user-status-title">账号状态</h2>
+        <button type="button" class="modal__close" @click="showUserStatus = false" aria-label="关闭账号状态">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 4l10 10M14 4l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <div class="account-summary">
+          <span class="account-summary__avatar" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="6.4" r="3.4" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M3.8 17a6.2 6.2 0 0112.4 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div>
+            <strong>{{ user.username }}</strong>
+            <p>30 天登录会话</p>
+          </div>
+        </div>
+        <dl class="account-status-list">
+          <div><dt>注册时间</dt><dd>{{ formatAccountDate(user.created_at) }}</dd></div>
+          <div><dt>最近登录</dt><dd>{{ formatAccountDate(user.last_login) }}</dd></div>
+        </dl>
+        <div class="form-actions account-status-actions">
+          <button type="button" class="btn btn--ghost" @click="showUserStatus = false">关闭</button>
+          <button type="button" class="btn btn--secondary" @click="logout">退出登录</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══ 文章详情弹窗 ═══ -->
+  <div v-if="selectedArticle" class="modal-overlay" @click="selectedArticle = null">
+    <div class="modal modal--wide" @click.stop>
+      <div class="modal__header">
+        <h2 class="modal__title">{{ selectedArticle.title }}</h2>
+        <button class="modal__close" @click="selectedArticle = null" aria-label="关闭">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 4l10 10M14 4l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <div class="article-detail__meta">
+          <span>作者: {{ selectedArticle.author }}</span>
+          <span>发布: {{ formatDate(selectedArticle.publish_time) }}</span>
+        </div>
+        <div class="article-detail__content" v-html="formatArticleContent(selectedArticle.content)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 添加课程弹窗 ═══ -->
+  <div v-if="showAddCourse" class="modal-overlay" @click="showAddCourse = false">
+    <div class="modal" @click.stop>
+      <div class="modal__header">
+        <h2 class="modal__title">添加课程</h2>
+        <button class="modal__close" @click="showAddCourse = false" aria-label="关闭">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 4l10 10M14 4l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal__body">
+        <form class="settings-form" @submit.prevent="saveCustomCourse">
+          <div class="form-group">
+            <label for="courseName">课程名称 *</label>
+            <input type="text" id="courseName" v-model="addCourseForm.name" placeholder="如: 高等数学">
+          </div>
+          <div class="form-group">
+            <label for="courseRoom">教室/地点</label>
+            <input type="text" id="courseRoom" v-model="addCourseForm.room" placeholder="如: B-101">
+          </div>
+          <div class="form-group">
+            <label for="courseTeacher">授课教师</label>
+            <input type="text" id="courseTeacher" v-model="addCourseForm.teacher" placeholder="如: 张教授">
+          </div>
+          <div class="form-group">
+            <label for="courseDay">星期</label>
+            <select id="courseDay" v-model.number="addCourseForm.day_of_week">
+              <option value="1">周一</option>
+              <option value="2">周二</option>
+              <option value="3">周三</option>
+              <option value="4">周四</option>
+              <option value="5">周五</option>
+              <option value="6">周六</option>
+              <option value="7">周日</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="courseStart">开始时间</label>
+              <input type="time" id="courseStart" v-model="addCourseForm.start_time">
+            </div>
+            <div class="form-group">
+              <label for="courseEnd">结束时间</label>
+              <input type="time" id="courseEnd" v-model="addCourseForm.end_time">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary" :disabled="isSavingCourse">
+              {{ isSavingCourse ? '保存中...' : '保存课程' }}
+            </button>
+            <button type="button" class="btn btn--secondary" @click="showAddCourse = false">取消</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Banner 通知容器 ═══ -->
+  <div class="banner-container">
+    <div
+      v-for="banner in banners"
+      :key="banner.id"
+      class="banner"
+      :class="'banner--' + banner.type"
+    >
+      <div class="banner__icon">
+        <svg v-if="banner.type === 'success'" viewBox="0 0 16 16" fill="none" width="16" height="16">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <svg v-if="banner.type === 'error'" viewBox="0 0 16 16" fill="none" width="16" height="16">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <svg v-if="banner.type === 'info'" viewBox="0 0 16 16" fill="none" width="16" height="16">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M8 7v4M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="banner__content">
+        <strong class="banner__title">{{ banner.title }}</strong>
+        <span v-if="banner.message" class="banner__body">{{ banner.message }}</span>
+      </div>
+      <button class="banner__close" @click="dismissBanner(banner.id)" aria-label="关闭">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</div>
+<!-- /app -->
+
+<!-- Vue 随项目提供，核心交互不依赖外部 CDN。 -->
+<script src="js/vendor/vue-3.5.45.global.prod.js"></script>
+<script src="js/api.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
